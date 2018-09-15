@@ -78,10 +78,33 @@ llvm::Value *createIfElse(llvm::IRBuilder<> &Builder, BBList List, ValList VL)
   Phi->addIncoming(ElseVal, ElseBB);
 				  
   return Phi;
-  
-  
 }
 
+llvm::Value *createLoop(llvm::IRBuilder<> &Builder, BBList List, ValList VL, llvm::Value *StartVal, llvm::Value *Endval)
+{
+  llvm::BasicBlock *PreheaderBB = Builder.GetInsertBlock();
+  llvm::Value *val = VL[0];
+  llvm::BasicBlock *LoopBB = List[0];
+  Builder.CreateBr(LoopBB);
+  Builder.SetInsertPoint(LoopBB);
+
+  llvm::PHINode *IndVar = Builder.CreatePHI(llvm::Type::getInt32Ty(Context), 2, "i");
+  IndVar->addIncoming(StartVal, PreheaderBB);
+  llvm::Value *Add = Builder.CreateAdd(val, Builder.getInt32(5), "addtmp");
+  llvm::Value *StepVal = Builder.getInt32(1);
+  llvm::Value *NextVal = Builder.CreateAdd(IndVar, StepVal, "nextval");
+  llvm::Value *EndCond = Builder.CreateICmpULT(IndVar, Endval, "endcond");
+  EndCond = Builder.CreateICmpNE(EndCond, Builder.getInt32(0), "loopcond");
+  
+  llvm::BasicBlock *LoopEndBB = Builder.GetInsertBlock();
+  llvm::BasicBlock *AfterBB = List[1];
+
+  Builder.CreateCondBr(EndCond, LoopBB, AfterBB);
+  Builder.SetInsertPoint(AfterBB);
+  IndVar->addIncoming(NextVal, LoopEndBB);
+
+  return Add;
+}
 
 int main(int argc, char *argv[])
 {
@@ -94,6 +117,8 @@ int main(int argc, char *argv[])
   setFuncArgs(fooFunc, FunArgs);
   llvm::BasicBlock *entry = createBB(fooFunc, "entry");
   Builder.SetInsertPoint(entry);
+
+  /* if 
   llvm::Function::arg_iterator args = fooFunc->arg_begin();
   llvm::Value *Arg1 = &*args++;
   llvm::Value *constant = Builder.getInt32(16);
@@ -116,8 +141,25 @@ int main(int argc, char *argv[])
   List.push_back(MergeBB);
 
   llvm::Value *v = createIfElse(Builder, List, VL);
+  */
+  llvm::Function::arg_iterator AI = fooFunc->arg_begin();
+  llvm::Value *Arg1 = &*AI++;
+  llvm::Value *Arg2 = &*AI++;
+  llvm::Value *constant = Builder.getInt32(16);
+  llvm::Value *val = createArith(Builder, Arg1, constant);
+  ValList VL;
+  VL.push_back(Arg1);
+
+  BBList List;
+  llvm::BasicBlock *LoopBB = createBB(fooFunc, "loop");
+  llvm::BasicBlock *AfterBB = createBB(fooFunc, "afterloop");
+  List.push_back(LoopBB);
+  List.push_back(AfterBB);
+
+  llvm::Value *StartVal = Builder.getInt32(1);
+  llvm::Value *Res = createLoop(Builder, List, VL, StartVal, Arg2);
   
-  Builder.CreateRet(v);
+  Builder.CreateRet(Res);
   verifyFunction(*fooFunc);
   ModuleOb->dump();
   
